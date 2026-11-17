@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pass the link to make money</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        darkBg: '#090d16',
+                        cardBg: '#111827',
+                        neonCyan: '#00f2fe',
+                        neonBlue: '#4facfe',
+                        neonGreen: '#10b981',
+                        neonPink: '#f43f5e'
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            background-color: #090d16;
+            color: #f3f4f6;
+            font-family: 'Inter', sans-serif;
+            background-image: 
+                linear-gradient(to right, rgba(0, 242, 254, 0.03) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(0, 242, 254, 0.03) 1px, transparent 1px);
+            background-size: 24px 24px;
+        }
+        .neon-border {
+            border: 1px solid rgba(0, 242, 254, 0.3);
+            box-shadow: 0 0 15px rgba(0, 242, 254, 0.1);
+        }
+        .neon-button {
+            background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
+            color: #090d16;
+            font-weight: 700;
+            box-shadow: 0 0 15px rgba(0, 242, 254, 0.4);
+            transition: all 0.3s ease;
+        }
+        .neon-button:hover {
+            box-shadow: 0 0 25px rgba(0, 242, 254, 0.7);
+            transform: translateY(-1px);
+        }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #090d16; }
+        ::-webkit-scrollbar-thumb { background: #1f2937; border-radius: 3px; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between selection:bg-cyan-500 selection:text-black">
+
+    <!-- ROOT CONTAINER -->
+    <div id="app" class="w-full max-w-md mx-auto min-h-screen flex flex-col relative shadow-2xl overflow-hidden bg-darkBg border-x border-cyan-500/20">
+        <!-- Render động bằng JS -->
+    </div>
+
+    <!-- SQL & Application Logic Script -->
+    <script>
+        // --- 1. LOCAL SQL ENGINE ---
+        class LocalSQLEngine {
+            constructor() {
+                this.initDB();
+            }
+
+            initDB() {
+                if (!localStorage.getItem('ptm_users')) {
+                    localStorage.setItem('ptm_users', JSON.stringify([
+                        { id: 1, username: 'admin', password: 'admin123@', fullname: 'Quản Trị Viên', phone: '0999999999', balance: 999999, role: 'admin' }
+                    ]));
+                }
+                if (!localStorage.getItem('ptm_links')) {
+                    localStorage.setItem('ptm_links', JSON.stringify([
+                        { id: 1, url: 'https://google.com', remaining: 50, reward: 1500, total_value: 75000 }
+                    ]));
+                }
+                if (!localStorage.getItem('ptm_logs')) {
+                    localStorage.setItem('ptm_logs', JSON.stringify([]));
+                }
+                if (!localStorage.getItem('ptm_withdrawals')) {
+                    localStorage.setItem('ptm_withdrawals', JSON.stringify([]));
+                }
+                if (!localStorage.getItem('ptm_chats')) {
+                    localStorage.setItem('ptm_chats', JSON.stringify([
+                        { id: 1, username: 'System', message: 'Chào mừng anh em đến với Pass the link to make money!', time: '10:00' }
+                    ]));
+                }
+                if (!localStorage.getItem('ptm_sessions')) {
+                    localStorage.setItem('ptm_sessions', JSON.stringify([]));
+                }
+            }
+
+            query(table) {
+                try {
+                    return JSON.parse(localStorage.getItem('ptm_' + table)) || [];
+                } catch (e) {
+                    return [];
+                }
+            }
+
+            save(table, data) {
+                localStorage.setItem('ptm_' + table, JSON.stringify(data));
+            }
+        }
+
+        const db = new LocalSQLEngine();
+
+        let state = {
+            currentView: 'login',
+            currentUser: null
+        };
+
+        // --- 2. ROUTER & RENDER ---
+        function render() {
+            const app = document.getElementById('app');
+            app.innerHTML = '';
+
+            const urlParams = new URLSearchParams(window.location.search);
+            const subToken = urlParams.get('sub_session');
+            
+            // Nếu có tham số sub_session nghĩa là người dùng ĐÃ VƯỢT LINK XONG và được chuyển đến trang con xác nhận
+            if (subToken) {
+                app.innerHTML = renderSubPage(subToken);
+                return;
+            }
+
+            // Xử lý khi hoàn tất từ trang con về trang chính
+            const verifyToken = urlParams.get('verify_pass');
+            if (verifyToken) {
+                window.history.replaceState({}, document.title, window.location.pathname);
+                completePassSession(verifyToken);
+                return;
+            }
+
+            switch (state.currentView) {
+                case 'login': app.innerHTML = renderLogin(); break;
+                case 'register': app.innerHTML = renderRegister(); break;
+                case 'forgot': app.innerHTML = renderForgot(); break;
+                case 'dashboard': app.innerHTML = renderDashboard(); break;
+                case 'admin': app.innerHTML = renderAdmin(); break;
+                case 'profile': app.innerHTML = renderProfile(); break;
+                case 'withdraw': app.innerHTML = renderWithdraw(); break;
+                case 'chat': app.innerHTML = renderChat(); break;
+                default: app.innerHTML = renderLogin();
+            }
+        }
+
+        // --- 3. TRANG CON XUẤT HIỆN SAU KHI VƯỢT LINK XONG ---
+        function renderSubPage(sessionToken) {
+            return `
+                <div class="flex-1 flex flex-col items-center justify-center p-6 text-center space-y-6 bg-darkBg">
+                    <div class="w-16 h-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 text-3xl mb-2 animate-bounce">
+                        <i class="fa-solid fa-check-to-slot"></i>
+                    </div>
+
+                    <div class="space-y-1">
+                        <h1 class="text-lg font-black text-white uppercase tracking-wider">Đã Vượt Link Thành Công!</h1>
+                        <p class="text-xs text-gray-400 font-mono">Mã phiên: ${sessionToken}</p>
+                    </div>
+
+                    <!-- Khung giao diện trang con đúng yêu cầu: hình ảnh và nút bấm xác nhận -->
+                    <div class="w-full max-w-xs bg-cardBg p-5 rounded-2xl neon-border space-y-4">
+                        <div class="w-full h-32 bg-darkBg rounded-xl border border-gray-800 flex items-center justify-center text-gray-500 text-xs overflow-hidden relative">
+                            <i class="fa-solid fa-image text-3xl text-gray-600 absolute"></i>
+                            <span class="z-10 bg-black/60 px-2 py-1 rounded text-[11px] text-cyan-400 font-semibold">Hình ảnh hoàn tất nhiệm vụ</span>
+                        </div>
+                        
+                        <p class="text-xs text-gray-300">Bạn đã vượt link quảng cáo thành công. Nhấn vào nút bên dưới để nhận thưởng.</p>
+
+                        <button onclick="finishSubPage('${sessionToken}')" class="w-full py-4 rounded-xl bg-emerald-500 text-darkBg font-black text-xs uppercase tracking-wider shadow-lg shadow-emerald-500/30 flex items-center justify-center space-x-2 hover:bg-emerald-400">
+                            <i class="fa-solid fa-circle-check text-base"></i>
+                            <span>TÔI ĐÃ HOÀN THÀNH VƯỢT LINK</span>
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function finishSubPage(sessionToken) {
+            // Quay về trang chính và kích hoạt cộng tiền
+            window.location.href = window.location.pathname + '?verify_pass=' + sessionToken;
+        }
+
+        // --- 4. AUTH VIEWS ---
+        function renderLogin() {
+            return `
+                <div class="flex-1 flex flex-col justify-center px-6 py-12">
+                    <div class="text-center mb-8">
+                        <div class="inline-block p-4 rounded-full bg-cyan-500/10 neon-border mb-3">
+                            <i class="fa-solid fa-bolt text-3xl text-neonCyan"></i>
+                        </div>
+                        <h1 class="text-2xl font-black text-white tracking-wide">PASS THE LINK</h1>
+                        <p class="text-xs text-cyan-400/80 uppercase tracking-widest mt-1">Make Money Online</p>
+                    </div>
+
+                    <div class="bg-cardBg p-6 rounded-2xl neon-border space-y-4">
+                        <h2 class="text-lg font-bold text-white mb-2"><i class="fa-solid fa-right-to-bracket text-cyan-400 mr-2"></i> Đăng Nhập</h2>
+                        <div>
+                            <label class="text-xs text-gray-400 mb-1 block">Tên đăng nhập</label>
+                            <input type="text" id="login_user" placeholder="Nhập tên đăng nhập" class="w-full bg-darkBg border border-gray-700 rounded-xl px-4 py-3 text-white text-sm focus:border-cyan-400 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-400 mb-1 block">Mật khẩu</label>
+                            <div class="relative">
+                                <input type="password" id="login_pass" placeholder="Nhập mật khẩu" class="w-full bg-darkBg border border-gray-700 rounded-xl px-4 py-3 text-white text-sm focus:border-cyan-400 focus:outline-none pr-10">
+                                <button type="button" onclick="togglePassword('login_pass', this)" class="absolute right-3 top-3.5 text-gray-400 hover:text-white"><i class="fa-solid fa-eye"></i></button>
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-between text-xs">
+                            <button onclick="switchView('forgot')" class="text-cyan-400 hover:underline">Quên mật khẩu?</button>
+                            <button onclick="switchView('register')" class="text-gray-300 hover:text-white">Chưa có tài khoản? <span class="text-cyan-400 font-semibold">Đăng ký</span></button>
+                        </div>
+                        <button onclick="handleLogin()" class="w-full py-3.5 rounded-xl neon-button text-sm uppercase tracking-wider mt-2">Đăng Nhập Ngay</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderRegister() {
+            return `
+                <div class="flex-1 flex flex-col justify-center px-6 py-8">
+                    <div class="bg-cardBg p-6 rounded-2xl neon-border space-y-3">
+                        <div class="flex items-center justify-between mb-2">
+                            <h2 class="text-lg font-bold text-white"><i class="fa-solid fa-user-plus text-cyan-400 mr-2"></i> Đăng Ký Tài Khoản</h2>
+                            <button onclick="switchView('login')" class="text-gray-400 hover:text-white text-sm"><i class="fa-solid fa-xmark"></i></button>
+                        </div>
+                        <div><label class="text-xs text-gray-400">Tên tài khoản</label><input type="text" id="reg_user" placeholder="Chọn tên đăng nhập" class="w-full bg-darkBg border border-gray-700 rounded-xl px-3 py-2.5 text-white text-sm focus:border-cyan-400 focus:outline-none"></div>
+                        <div><label class="text-xs text-gray-400">Họ và tên</label><input type="text" id="reg_name" placeholder="Nhập họ và tên đầy đủ" class="w-full bg-darkBg border border-gray-700 rounded-xl px-3 py-2.5 text-white text-sm focus:border-cyan-400 focus:outline-none"></div>
+                        <div><label class="text-xs text-gray-400">Xác nhận SĐT</label><input type="tel" id="reg_phone" placeholder="Nhập số điện thoại chính chủ" class="w-full bg-darkBg border border-gray-700 rounded-xl px-3 py-2.5 text-white text-sm focus:border-cyan-400 focus:outline-none"></div>
+                        <div><label class="text-xs text-gray-400">Mật khẩu</label><input type="password" id="reg_pass" placeholder="Mật khẩu bảo mật" class="w-full bg-darkBg border border-gray-700 rounded-xl px-3 py-2.5 text-white text-sm focus:border-cyan-400 focus:outline-none"></div>
+                        <div><label class="text-xs text-gray-400">Xác nhận mật khẩu</label><input type="password" id="reg_repass" placeholder="Nhập lại mật khẩu" class="w-full bg-darkBg border border-gray-700 rounded-xl px-3 py-2.5 text-white text-sm focus:border-cyan-400 focus:outline-none"></div>
+                        <button onclick="handleRegister()" class="w-full py-3 rounded-xl neon-button text-sm uppercase tracking-wider mt-3">Hoàn Tất Đăng Ký</button>
+                        <div class="text-center mt-2"><button onclick="switchView('login')" class="text-xs text-cyan-400 hover:underline">Đã có tài khoản? Đăng nhập ngay</button></div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderForgot() {
+            return `
+                <div class="flex-1 flex flex-col justify-center px-6 py-12">
+                    <div class="bg-cardBg p-6 rounded-2xl neon-border space-y-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <h2 class="text-lg font-bold text-white"><i class="fa-solid fa-key text-cyan-400 mr-2"></i> Quên Mật Khẩu</h2>
+                            <button onclick="switchView('login')" class="text-gray-400 hover:text-white text-sm"><i class="fa-solid fa-xmark"></i></button>
+                        </div>
+                        <div><label class="text-xs text-gray-400 mb-1 block">Tên tài khoản</label><input type="text" id="forgot_user" placeholder="Tên đăng nhập" class="w-full bg-darkBg border border-gray-700 rounded-xl px-4 py-3 text-white text-sm focus:border-cyan-400 focus:outline-none"></div>
+                        <div><label class="text-xs text-gray-400 mb-1 block">Số điện thoại xác thực</label><input type="tel" id="forgot_phone" placeholder="Số điện thoại" class="w-full bg-darkBg border border-gray-700 rounded-xl px-4 py-3 text-white text-sm focus:border-cyan-400 focus:outline-none"></div>
+                        <button onclick="handleForgot()" class="w-full py-3.5 rounded-xl neon-button text-sm uppercase tracking-wider mt-2">Khôi Phục Mật Khẩu</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        // --- 5. MAIN DASHBOARD ---
+        let showMenuDrawer = false;
+        let showAvatarDrawer = false;
+
+        function renderDashboard() {
+            const user = state.currentUser;
+            const links = db.query('links');
+            const logs = db.query('logs').filter(l => l.username === user.username);
+            const totalEarned = logs.reduce((acc, curr) => acc + curr.reward, 0);
+
+            return `
+                <div class="flex items-center justify-between p-4 bg-cardBg border-b border-gray-800 sticky top-0 z-30">
+                    <div class="flex items-center space-x-3 cursor-pointer" onclick="toggleAvatarDrawer(true)">
+                        <div class="w-10 h-10 rounded-full bg-gradient-to-tr from-cyan-500 to-blue-500 flex items-center justify-center font-bold text-darkBg shadow-md">
+                            ${user.fullname.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                            <p class="text-xs text-gray-400">Xin chào,</p>
+                            <p class="text-sm font-bold text-white truncate max-w-[120px]">${user.fullname}</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-3">
+                        <div class="bg-darkBg px-3 py-1.5 rounded-xl border border-cyan-500/30 text-right">
+                            <p class="text-[10px] text-cyan-400 font-semibold uppercase">Số dư ví</p>
+                            <p class="text-sm font-black text-white">${user.balance.toLocaleString()} đ</p>
+                        </div>
+                        <button onclick="toggleMenuDrawer(true)" class="p-2.5 rounded-xl bg-cardBg border border-gray-700 text-cyan-400 hover:text-white"><i class="fa-solid fa-bars text-lg"></i></button>
+                    </div>
+                </div>
+
+                <div class="flex-1 p-4 space-y-4 overflow-y-auto pb-24">
+                    <div class="p-5 rounded-2xl bg-gradient-to-r from-cyan-900/40 via-blue-900/30 to-purple-900/40 neon-border text-center relative overflow-hidden">
+                        <h2 class="text-lg font-black text-neonCyan tracking-wider uppercase mb-1">Pass the link to make money</h2>
+                        <p class="text-xs text-gray-300">Vượt link rút gọn thông minh - Nhận thưởng tự động mỗi ngày.</p>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="bg-cardBg p-3.5 rounded-xl border border-gray-800">
+                            <p class="text-xs text-gray-400"><i class="fa-solid fa-check-double text-emerald-400 mr-1"></i> Đã vượt link</p>
+                            <p class="text-lg font-bold text-white mt-1">${logs.length} lần</p>
+                        </div>
+                        <div class="bg-cardBg p-3.5 rounded-xl border border-gray-800">
+                            <p class="text-xs text-gray-400"><i class="fa-solid fa-wallet text-cyan-400 mr-1"></i> Tổng thu nhập</p>
+                            <p class="text-lg font-bold text-cyan-400 mt-1">${totalEarned.toLocaleString()} đ</p>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h3 class="text-sm font-bold text-white mb-3 flex items-center justify-between">
+                            <span><i class="fa-solid fa-fire text-amber-400 mr-2"></i> Danh Sách Link Kiếm Tiền</span>
+                            <span class="text-xs text-cyan-400 font-normal">${links.length} nhiệm vụ</span>
+                        </h3>
+                        <div class="space-y-3">
+                            ${links.length === 0 ? '<p class="text-xs text-center text-gray-500 py-4">Hiện chưa có link nào từ Admin.</p>' : ''}
+                            ${links.map(link => `
+                                <div class="bg-cardBg p-4 rounded-xl border border-gray-800 space-y-2">
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-xs px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400 font-mono">ID #${link.id}</span>
+                                        <span class="text-xs text-emerald-400 font-semibold">+${link.reward.toLocaleString()} đ / lần</span>
+                                    </div>
+                                    <p class="text-xs text-gray-300 truncate font-mono bg-darkBg p-2 rounded border border-gray-800">${link.url}</p>
+                                    <div class="flex items-center justify-between pt-1">
+                                        <span class="text-[11px] text-gray-400"><i class="fa-solid fa-layer-group mr-1"></i> Còn lại: <strong class="text-white">${link.remaining}</strong> lượt</span>
+                                        <button onclick="startPassLink(${link.id})" class="px-4 py-2 rounded-lg neon-button text-xs uppercase tracking-wider">
+                                            <i class="fa-solid fa-bolt mr-1"></i> Vượt Link Ngay
+                                        </button>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+
+                    <div class="bg-cardBg rounded-xl border border-gray-800 p-4">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="text-sm font-bold text-white"><i class="fa-solid fa-comments text-cyan-400 mr-2"></i> Khung Chat Tổng</h3>
+                            <button onclick="switchView('chat')" class="text-xs text-cyan-400 hover:underline">Phòng chat đầy đủ <i class="fa-solid fa-arrow-right ml-1"></i></button>
+                        </div>
+                        <div class="bg-darkBg rounded-lg p-3 h-32 overflow-y-auto space-y-2 text-xs mb-3">
+                            ${renderMiniChat()}
+                        </div>
+                        <div class="flex space-x-2">
+                            <input type="text" id="mini_chat_input" placeholder="Nhập tin nhắn..." class="flex-1 bg-darkBg border border-gray-700 rounded-lg px-3 py-2 text-white text-xs focus:border-cyan-400 focus:outline-none" onkeypress="if(event.key==='Enter') sendMiniChat()">
+                            <button onclick="sendMiniChat()" class="px-4 py-2 rounded-lg bg-cyan-500 text-darkBg font-bold text-xs"><i class="fa-solid fa-paper-plane"></i></button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="p-3 bg-cardBg border-t border-gray-800 flex items-center justify-between text-xs">
+                    <div class="flex items-center space-x-2">
+                        <div class="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 border border-emerald-500/40"><i class="fa-solid fa-headset"></i></div>
+                        <div>
+                            <p class="text-white font-bold">CSKH 24/7</p>
+                            <p class="text-[10px] text-gray-400">Hỗ trợ vượt link & rút tiền</p>
+                        </div>
+                    </div>
+                    <a href="https://t.me/" target="_blank" class="px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-semibold hover:bg-emerald-500/20"><i class="fa-brands fa-telegram mr-1"></i> Liên Hệ Ngay</a>
+                </div>
+
+                <!-- MENU DRAWER -->
+                <div id="menu_drawer" class="fixed inset-0 bg-black/70 z-50 transition-opacity duration-300 ${showMenuDrawer ? '' : 'hidden pointer-events-none'}">
+                    <div class="absolute right-0 top-0 bottom-0 w-72 bg-cardBg border-l border-gray-800 p-6 flex flex-col justify-between">
+                        <div>
+                            <div class="flex items-center justify-between mb-6 pb-3 border-b border-gray-800">
+                                <h3 class="text-sm font-bold text-white"><i class="fa-solid fa-bars text-cyan-400 mr-2"></i> Menu Hệ Thống</h3>
+                                <button onclick="toggleMenuDrawer(false)" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+                            </div>
+                            <div class="space-y-2">
+                                <button onclick="toggleMenuDrawer(false); switchView('dashboard')" class="w-full text-left px-4 py-3 rounded-xl bg-darkBg text-cyan-400 font-semibold text-xs flex items-center"><i class="fa-solid fa-house w-6"></i> Trang Chủ</button>
+                                <button onclick="toggleMenuDrawer(false); switchView('profile')" class="w-full text-left px-4 py-3 rounded-xl hover:bg-darkBg text-gray-300 text-xs flex items-center"><i class="fa-solid fa-user w-6 text-cyan-400"></i> Thông Tin Tài Khoản</button>
+                                <button onclick="toggleMenuDrawer(false); switchView('withdraw')" class="w-full text-left px-4 py-3 rounded-xl hover:bg-darkBg text-gray-300 text-xs flex items-center"><i class="fa-solid fa-money-bill-transfer w-6 text-emerald-400"></i> Rút Tiền</button>
+                                ${user.role === 'admin' ? `<button onclick="toggleMenuDrawer(false); switchView('admin')" class="w-full text-left px-4 py-3 rounded-xl bg-purple-500/10 border border-purple-500/30 text-purple-400 font-bold text-xs flex items-center"><i class="fa-solid fa-shield-halved w-6"></i> Quản Trị Admin</button>` : ''}
+                            </div>
+                        </div>
+                        <button onclick="handleLogout()" class="w-full py-3 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/30 font-semibold text-xs flex items-center justify-center"><i class="fa-solid fa-right-from-bracket mr-2"></i> Đăng Xuất</button>
+                    </div>
+                </div>
+
+                <!-- AVATAR DRAWER -->
+                <div id="avatar_drawer" class="fixed inset-0 bg-black/70 z-50 transition-opacity duration-300 ${showAvatarDrawer ? '' : 'hidden pointer-events-none'}">
+                    <div class="absolute left-0 top-0 bottom-0 w-72 bg-cardBg border-r border-gray-800 p-6 flex flex-col justify-between">
+                        <div>
+                            <div class="flex items-center justify-between mb-6 pb-3 border-b border-gray-800">
+                                <h3 class="text-sm font-bold text-white"><i class="fa-solid fa-user-circle text-cyan-400 mr-2"></i> Hồ Sơ Cá Nhân</h3>
+                                <button onclick="toggleAvatarDrawer(false)" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+                            </div>
+                            <div class="text-center p-4 bg-darkBg rounded-xl border border-gray-800 mb-4">
+                                <div class="w-16 h-16 rounded-full bg-gradient-to-tr from-cyan-500 to-blue-500 mx-auto flex items-center justify-center text-xl font-bold text-darkBg mb-2">${user.fullname.charAt(0).toUpperCase()}</div>
+                                <p class="text-sm font-bold text-white">${user.fullname}</p>
+                                <p class="text-xs text-cyan-400 font-mono">@${user.username}</p>
+                            </div>
+                        </div>
+                        <button onclick="handleLogout()" class="w-full py-3 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/30 font-semibold text-xs flex items-center justify-center"><i class="fa-solid fa-right-from-bracket mr-2"></i> Đăng Xuất</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        // --- 6. CHAT & PROFILE & WITHDRAW ---
+        function renderMiniChat() {
+            const chats = db.query('chats');
+            return chats.slice(-10).map(c => `<div><strong class="text-cyan-400">@${c.username}:</strong> <span class="text-gray-300">${c.message}</span></div>`).join('');
+        }
+        function sendMiniChat() {
+            const input = document.getElementById('mini_chat_input');
+            const msg = input.value.trim();
+            if (!msg) return;
+            const chats = db.query('chats');
+            chats.push({ id: Date.now(), username: state.currentUser.username, message: msg, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) });
+            db.save('chats', chats);
+            input.value = '';
+            render();
+        }
+        function renderChat() {
+            const chats = db.query('chats');
+            return `
+                <div class="flex items-center justify-between p-4 bg-cardBg border-b border-gray-800">
+                    <button onclick="switchView('dashboard')" class="text-cyan-400 text-sm"><i class="fa-solid fa-arrow-left mr-1"></i> Quay lại</button>
+                    <h2 class="text-sm font-bold text-white">Khung Chat Cộng Đồng</h2><div class="w-6"></div>
+                </div>
+                <div class="flex-1 p-4 overflow-y-auto space-y-3">
+                    ${chats.map(c => `<div class="bg-cardBg p-3 rounded-xl border border-gray-800"><div class="flex justify-between items-center mb-1"><span class="text-xs font-bold text-cyan-400">@${c.username}</span><span class="text-[10px] text-gray-500">${c.time}</span></div><p class="text-xs text-gray-200">${c.message}</p></div>`).join('')}
+                </div>
+                <div class="p-4 bg-cardBg border-t border-gray-800 flex space-x-2">
+                    <input type="text" id="full_chat_input" placeholder="Nhập tin nhắn..." class="flex-1 bg-darkBg border border-gray-700 rounded-xl px-4 py-3 text-white text-xs focus:border-cyan-400 focus:outline-none" onkeypress="if(event.key==='Enter') sendFullChat()">
+                    <button onclick="sendFullChat()" class="px-5 py-3 rounded-xl neon-button text-xs"><i class="fa-solid fa-paper-plane"></i></button>
+                </div>
+            `;
+        }
+        function sendFullChat() {
+            const input = document.getElementById('full_chat_input');
+            const msg = input.value.trim();
+            if (!msg) return;
+            const chats = db.query('chats');
+            chats.push({ id: Date.now(), username: state.currentUser.username, message: msg, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) });
+            db.save('chats', chats);
+            input.value = '';
+            render();
+        }
+        function renderProfile() {
+            const u = state.currentUser;
+            return `
+                <div class="flex items-center justify-between p-4 bg-cardBg border-b border-gray-800">
+                    <button onclick="switchView('dashboard')" class="text-cyan-400 text-sm"><i class="fa-solid fa-arrow-left mr-1"></i> Quay lại</button>
+                    <h2 class="text-sm font-bold text-white">Thông Tin Tài Khoản</h2><div class="w-6"></div>
+                </div>
+                <div class="p-6 space-y-4">
+                    <div class="bg-cardBg p-5 rounded-2xl neon-border space-y-3">
+                        <div><label class="text-xs text-gray-400">Tên tài khoản</label><input type="text" disabled value="${u.username}" class="w-full bg-darkBg border border-gray-700 rounded-xl px-4 py-3 text-gray-400 text-sm"></div>
+                        <div><label class="text-xs text-gray-400">Họ và tên</label><input type="text" id="prof_name" value="${u.fullname}" class="w-full bg-darkBg border border-gray-700 rounded-xl px-4 py-3 text-white text-sm focus:border-cyan-400 focus:outline-none"></div>
+                        <div><label class="text-xs text-gray-400">Số điện thoại</label><input type="tel" id="prof_phone" value="${u.phone}" class="w-full bg-darkBg border border-gray-700 rounded-xl px-4 py-3 text-white text-sm focus:border-cyan-400 focus:outline-none"></div>
+                        <button onclick="updateProfile()" class="w-full py-3 rounded-xl neon-button text-xs uppercase tracking-wider mt-2">Cập Nhật</button>
+                    </div>
+                </div>
+            `;
+        }
+        function updateProfile() {
+            const name = document.getElementById('prof_name').value.trim();
+            const phone = document.getElementById('prof_phone').value.trim();
+            if (!name || !phone) { alert('Điền đầy đủ thông tin!'); return; }
+            const users = db.query('users');
+            const idx = users.findIndex(x => x.username === state.currentUser.username);
+            if (idx !== -1) {
+                users[idx].fullname = name; users[idx].phone = phone;
+                db.save('users', users); state.currentUser = users[idx];
+                alert('Cập nhật thành công!'); render();
+            }
+        }
+        function renderWithdraw() {
+            const u = state.currentUser;
+            const myWithdrawals = db.query('withdrawals').filter(w => w.username === u.username);
+            return `
+                <div class="flex items-center justify-between p-4 bg-cardBg border-b border-gray-800">
+                    <button onclick="switchView('dashboard')" class="text-cyan-400 text-sm"><i class="fa-solid fa-arrow-left mr-1"></i> Quay lại</button>
+                    <h2 class="text-sm font-bold text-white">Rút Tiền</h2><div class="w-6"></div>
+                </div>
+                <div class="p-4 space-y-4 overflow-y-auto pb-12">
+                    <div class="bg-cardBg p-5 rounded-2xl neon-border space-y-3">
+                        <div class="text-center pb-2 border-b border-gray-800">
+                            <p class="text-xs text-gray-400">Số dư khả dụng</p>
+                            <p class="text-2xl font-black text-cyan-400 mt-1">${u.balance.toLocaleString()} đ</p>
+                        </div>
+                        <div><label class="text-xs text-gray-400">Ngân hàng</label><select id="wd_bank" class="w-full bg-darkBg border border-gray-700 rounded-xl px-4 py-3 text-white text-sm"><option value="MBBank">MBBank</option><option value="VCB">Vietcombank</option><option value="MOMO">MoMo</option></select></div>
+                        <div><label class="text-xs text-gray-400">Số tài khoản</label><input type="text" id="wd_acc" placeholder="Nhập số tài khoản" class="w-full bg-darkBg border border-gray-700 rounded-xl px-4 py-3 text-white text-sm"></div>
+                        <div><label class="text-xs text-gray-400">Số tiền rút (Tối thiểu 10,000 đ)</label><input type="number" id="wd_amount" placeholder="10000" class="w-full bg-darkBg border border-gray-700 rounded-xl px-4 py-3 text-white text-sm"></div>
+                        <button onclick="requestWithdraw()" class="w-full py-3 rounded-xl neon-button text-xs uppercase tracking-wider mt-2">Rút Tiền</button>
+                    </div>
+                </div>
+            `;
+        }
+        function requestWithdraw() {
+            const bank = document.getElementById('wd_bank').value;
+            const acc = document.getElementById('wd_acc').value.trim();
+            const amount = parseInt(document.getElementById('wd_amount').value);
+            if (!acc || isNaN(amount) || amount < 10000) { alert('Nhập hợp lệ và tối thiểu 10,000 đ!'); return; }
+            if (amount > state.currentUser.balance) { alert('Số dư không đủ!'); return; }
+
+            const users = db.query('users');
+            const uIdx = users.findIndex(x => x.username === state.currentUser.username);
+            users[uIdx].balance -= amount; db.save('users', users); state.currentUser = users[uIdx];
+
+            const wds = db.query('withdrawals');
+            wds.unshift({ id: Date.now(), username: state.currentUser.username, bank, acc, amount, status: 'Đang xử lý', time: new Date().toLocaleString() });
+            db.save('withdrawals', wds);
+            alert('Đã tạo lệnh rút tiền!'); render();
+        }
+
+        // --- 7. ADMIN VIEW ---
+        let showAdminCredentialsNotice = true;
+        function renderAdmin() {
+            const users = db.query('users');
+            const links = db.query('links');
+            const logs = db.query('logs');
+            const today = new Date().toLocaleDateString();
+            const logsToday = logs.filter(l => new Date(l.timestamp).toLocaleDateString() === today);
+            
+            const userEarnMap = {};
+            logs.forEach(l => { userEarnMap[l.username] = (userEarnMap[l.username] || 0) + l.reward; });
+            const topUsers = Object.keys(userEarnMap).map(u => ({ username: u, total: userEarnMap[u] })).sort((a,b) => b.total - a.total);
+
+            return `
+                <div class="flex items-center justify-between p-4 bg-cardBg border-b border-gray-800">
+                    <button onclick="switchView('dashboard')" class="text-cyan-400 text-sm"><i class="fa-solid fa-arrow-left mr-1"></i> Trang Chủ</button>
+                    <h2 class="text-sm font-bold text-white"><i class="fa-solid fa-shield-halved text-purple-400 mr-2"></i> Quản Trị Admin</h2><div class="w-6"></div>
+                </div>
+                <div class="p-4 space-y-4 overflow-y-auto pb-24">
+                    ${showAdminCredentialsNotice ? `
+                        <div class="bg-purple-900/30 border border-purple-500/40 p-3.5 rounded-xl flex items-start justify-between">
+                            <div class="text-xs text-purple-200">
+                                <p class="font-bold mb-1"><i class="fa-solid fa-lock text-purple-400 mr-1"></i> Admin:</p>
+                                <p>User: <strong class="text-white">admin</strong> | Pass: <strong class="text-white">admin123@</strong></p>
+                            </div>
+                            <button onclick="showAdminCredentialsNotice=false; render();" class="text-purple-300 hover:text-white text-xs"><i class="fa-solid fa-xmark"></i></button>
+                        </div>
+                    ` : ''}
+
+                    <div class="bg-cardBg p-4 rounded-xl border border-gray-800 space-y-3">
+                        <h3 class="text-sm font-bold text-white"><i class="fa-solid fa-link text-cyan-400 mr-2"></i> Thêm Link Vượt</h3>
+                        <div><label class="text-xs text-gray-400">URL</label><input type="text" id="admin_link_url" placeholder="https://example.com" class="w-full bg-darkBg border border-gray-700 rounded-xl px-3 py-2.5 text-white text-xs"></div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div><label class="text-xs text-gray-400">Số lượt</label><input type="number" id="admin_link_count" placeholder="100" class="w-full bg-darkBg border border-gray-700 rounded-xl px-3 py-2 text-white text-xs"></div>
+                            <div><label class="text-xs text-gray-400">Thưởng (đ)</label><input type="number" id="admin_link_reward" placeholder="1500" class="w-full bg-darkBg border border-gray-700 rounded-xl px-3 py-2 text-white text-xs"></div>
+                        </div>
+                        <button onclick="adminAddLink()" class="w-full py-2.5 rounded-xl neon-button text-xs uppercase">Thêm Link</button>
+                    </div>
+
+                    <div class="bg-cardBg p-4 rounded-xl border border-gray-800 space-y-2">
+                        <h3 class="text-xs font-bold text-white mb-2">Link Hoạt Động (${links.length})</h3>
+                        <div class="space-y-2 max-h-40 overflow-y-auto text-xs">
+                            ${links.map(l => `<div class="bg-darkBg p-2.5 rounded-lg flex justify-between items-center border border-gray-800"><div class="truncate pr-2"><p class="font-mono text-cyan-400 truncate">${l.url}</p><p class="text-[10px] text-gray-400">Còn: ${l.remaining} | Thưởng: ${l.reward}đ</p></div><button onclick="adminDeleteLink(${l.id})" class="text-rose-400 p-1"><i class="fa-solid fa-trash"></i></button></div>`).join('')}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // --- 8. LUỒNG VƯỢT LINK ĐÚNG CHUẨN ---
+        function startPassLink(linkId) {
+            const links = db.query('links');
+            const linkObj = links.find(l => l.id === linkId);
+            if (!linkObj || linkObj.remaining <= 0) { alert('Link đã hết lượt!'); return; }
+
+            const sessionToken = 'YM_' + Math.random().toString(36).substring(2, 10).toUpperCase() + '_' + Date.now().toString(36).toUpperCase();
+            
+            const sessions = db.query('sessions');
+            sessions.push({
+                session_token: sessionToken,
+                username: state.currentUser.username,
+                link_id: linkId,
+                url: linkObj.url,
+                reward: linkObj.reward,
+                status: 'pending',
+                time: Date.now()
+            });
+            db.save('sessions', sessions);
+
+            // BƯỚC 1: Mô phỏng đưa người dùng sang trang vượt link (hoặc API Yeumoney).
+            // Sau khi vượt xong, trang ngoài sẽ redirect người dùng trở về trang con xác nhận của web: ?sub_session=...
+            const subPageRedirectUrl = window.location.origin + window.location.pathname + '?sub_session=' + sessionToken;
+            
+            // Ở đây ta mở tab qua trang vượt link (hoặc link quảng cáo). 
+            // Để demo hệ thống chạy liền mạch, ta mô phỏng mở tab giả lập quá trình vượt link trong 3 giây rồi tự động đá về trang con xác nhận của bạn.
+            window.open(linkObj.url, '_blank');
+
+            // Sau khi người dùng thao tác ở tab ngoài xong, hệ thống chuyển họ vào trang con xác nhận:
+            setTimeout(() => {
+                window.location.href = subPageRedirectUrl;
+            }, 1500);
+        }
+
+        function completePassSession(sessionToken) {
+            const sessions = db.query('sessions');
+            const session = sessions.find(s => s.session_token === sessionToken);
+
+            if (!session) { alert('Phiên không hợp lệ!'); return; }
+            if (session.status === 'completed') { alert('Phiên đã nhận thưởng!'); return; }
+
+            session.status = 'completed';
+            db.save('sessions', sessions);
+
+            const users = db.query('users');
+            const uIdx = users.findIndex(u => u.username === session.username);
+            if (uIdx !== -1) {
+                users[uIdx].balance += session.reward;
+                db.save('users', users);
+                state.currentUser = users[uIdx];
+            }
+
+            const links = db.query('links');
+            const lIdx = links.findIndex(l => l.id === session.link_id);
+            if (lIdx !== -1) {
+                links[lIdx].remaining = Math.max(0, links[lIdx].remaining - 1);
+                links[lIdx].total_value = links[lIdx].remaining * links[lIdx].reward;
+                db.save('links', links);
+            }
+
+            const logs = db.query('logs');
+            logs.unshift({
+                id: Date.now(),
+                username: session.username,
+                url: session.url,
+                reward: session.reward,
+                timestamp: new Date().toISOString()
+            });
+            db.save('logs', logs);
+
+            state.currentView = 'dashboard';
+            alert(`🎉 Vượt link thành công! Tài khoản được cộng +${session.reward.toLocaleString()} đ!`);
+            render();
+        }
+
+        // --- 9. CONTROLLERS ---
+        function switchView(viewName) { state.currentView = viewName; showMenuDrawer = false; showAvatarDrawer = false; render(); }
+        function toggleMenuDrawer(show) { showMenuDrawer = show; render(); }
+        function toggleAvatarDrawer(show) { showAvatarDrawer = show; render(); }
+        function togglePassword(id, btn) {
+            const input = document.getElementById(id);
+            if (input.type === 'password') { input.type = 'text'; btn.innerHTML = '<i class="fa-solid fa-eye-slash"></i>'; }
+            else { input.type = 'password'; btn.innerHTML = '<i class="fa-solid fa-eye"></i>'; }
+        }
+        function handleLogin() {
+            const user = document.getElementById('login_user').value.trim();
+            const pass = document.getElementById('login_pass').value.trim();
+            if (!user || !pass) { alert('Vui lòng nhập đầy đủ!'); return; }
+            const users = db.query('users');
+            const found = users.find(u => u.username === user && u.password === pass);
+            if (found) { state.currentUser = found; state.currentView = 'dashboard'; render(); }
+            else { alert('Sai tài khoản hoặc mật khẩu!'); }
+        }
+        function handleRegister() {
+            const user = document.getElementById('reg_user').value.trim();
+            const fullname = document.getElementById('reg_name').value.trim();
+            const phone = document.getElementById('reg_phone').value.trim();
+            const pass = document.getElementById('reg_pass').value.trim();
+            const repass = document.getElementById('reg_repass').value.trim();
+            if (!user || !fullname || !phone || !pass) { alert('Vui lòng điền đủ!'); return; }
+            if (pass !== repass) { alert('Mật khẩu không khớp!'); return; }
+            const users = db.query('users');
+            if (users.some(u => u.username === user)) { alert('Tài khoản đã tồn tại!'); return; }
+            users.push({ id: Date.now(), username: user, password: pass, fullname, phone, balance: 0, role: 'member' });
+            db.save('users', users);
+            alert('Đăng ký thành công!'); state.currentView = 'login'; render();
+        }
+        function handleForgot() {
+            const user = document.getElementById('forgot_user').value.trim();
+            const phone = document.getElementById('forgot_phone').value.trim();
+            const users = db.query('users');
+            const found = users.find(u => u.username === user && u.phone === phone);
+            if (found) { alert(`Mật khẩu của bạn là: ${found.password}`); state.currentView = 'login'; render(); }
+            else { alert('Không tìm thấy thông tin khớp!'); }
+        }
+        function handleLogout() { state.currentUser = null; state.currentView = 'login'; render(); }
+
+        function adminAddLink() {
+            const url = document.getElementById('admin_link_url').value.trim();
+            const count = parseInt(document.getElementById('admin_link_count').value);
+            const reward = parseInt(document.getElementById('admin_link_reward').value);
+            if (!url || isNaN(count) || isNaN(reward)) { alert('Nhập dữ liệu hợp lệ!'); return; }
+            const links = db.query('links');
+            links.unshift({ id: Date.now(), url, remaining: count, reward, total_value: count * reward });
+            db.save('links', links); alert('Đã thêm link!'); render();
+        }
+        function adminDeleteLink(id) {
+            if (!confirm('Xóa link này?')) return;
+            let links = db.query('links');
+            links = links.filter(l => l.id !== id);
+            db.save('links', links); render();
+        }
+
+        window.onload = function() { render(); };
+    </script>
+</body>
+</html>
